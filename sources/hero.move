@@ -9,6 +9,7 @@ module game::hero {
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
     use sui::event;
+    use sui::balance::{Self, Balance};
 
 
     /// -------------------------------------------------------------------------------
@@ -67,7 +68,8 @@ module game::hero {
     // Tạo GameAdmin
     public struct GameInfo has key {
         id: UID,
-        admin: address
+        admin: address,
+        payments: Balance<SUI>,
     }
 
     public struct GameAdmin has key {
@@ -113,10 +115,11 @@ module game::hero {
     const EBOAR_WON: u64 = 0;
 
     const EHERO_TIRED: u64 = 1;
+    const ENOT_ADMIN: u64 = 2;
 
-    const EINSUFFICIENT_FUNDS: u64 = 2; 
+    const EINSUFFICIENT_FUNDS: u64 = 3; 
 
-    const ENO_SWORD: u64 = 3;
+    const ENO_SWORD: u64 = 4;
 
     const EWRONG_GAME_PLAY: u64 = 5;
 
@@ -129,7 +132,7 @@ module game::hero {
 
     }
 
-    public entry fun acquire_hero(game: &GameInfo, payment: Coin<SUI>, ctx: &mut TxContext) {
+    public entry fun acquire_hero(game: &mut GameInfo, payment: Coin<SUI>, ctx: &mut TxContext) {
         let sword = create_sword(game, payment, ctx);
         let hero = create_hero(game, sword, ctx);
         transfer::transfer(hero, tx_context::sender(ctx))
@@ -260,6 +263,19 @@ module game::hero {
 
 
     /// -------------------------------------------------------------------------------
+    /// ---------------------ENTRY FUNCTION LIÊN QUAN TỚI PAYMENT----------------------
+    /// -------------------------------------------------------------------------------
+    
+    public entry fun take_payment(admin: &GameAdmin, game: &mut GameInfo, ctx: &mut TxContext
+    ) {
+        assert!(admin.game_id == object::id(game), ENOT_ADMIN);
+        let payment = coin::from_balance(balance::withdraw_all(&mut game.payments), ctx);
+        transfer::public_transfer(payment, tx_context::sender(ctx))
+    }
+
+
+
+    /// -------------------------------------------------------------------------------
     /// -----------------HELPER FUNCTION CHO VIỆC TẠO GAME ADMIN VÀ GAME INFO----------
     /// -------------------------------------------------------------------------------
     fun create(ctx: &mut TxContext){
@@ -267,9 +283,10 @@ module game::hero {
         let id = object::new(ctx);
         let game_id = object::uid_to_inner(&id);
 
-        transfer::freeze_object(GameInfo { 
+        transfer::share_object(GameInfo { 
             id, 
-            admin: sender 
+            admin: sender,
+            payments: balance::zero()
         });
 
         transfer::transfer(
@@ -288,14 +305,14 @@ module game::hero {
     /// -------------------------------------------------------------------------------
     
     // Tạo Sword
-    public fun create_sword(game: &GameInfo, payment: Coin<SUI>, ctx: &mut TxContext): Sword {
+    public fun create_sword(game: &mut GameInfo, payment: Coin<SUI>, ctx: &mut TxContext): Sword {
         // Lấy số lượng coin hiện tại mà user sở hữu 
         let value = coin::value(&payment);
 
         assert!(value >= MIN_SWORD_COST, EINSUFFICIENT_FUNDS);
 
         // pay coin cho admin 
-        transfer::public_transfer(payment, game.admin);
+        coin::put(&mut game.payments, payment);
 
         // Công thức tính magic 
         let magic =  (value - MIN_SWORD_COST)/ MIN_SWORD_COST;
