@@ -10,6 +10,7 @@ module game::hero {
     use sui::sui::SUI;
     use sui::event;
     use sui::balance::{Self, Balance};
+    use sui::random::{Self, Random};
 
 
     /// -------------------------------------------------------------------------------
@@ -132,8 +133,9 @@ module game::hero {
 
     }
 
-    public entry fun acquire_hero(game: &mut GameInfo, payment: Coin<SUI>, ctx: &mut TxContext) {
-        let sword = create_sword(game, payment, ctx);
+    #[allow(lint(public_random))]
+    public entry fun acquire_hero(game: &mut GameInfo, payment: Coin<SUI>,r:&Random, ctx: &mut TxContext) {
+        let sword = create_sword(game, payment,r,  ctx);
         let hero = create_hero(game, sword, ctx);
         transfer::transfer(hero, tx_context::sender(ctx))
 
@@ -305,7 +307,9 @@ module game::hero {
     /// -------------------------------------------------------------------------------
     
     // Tạo Sword
-    public fun create_sword(game: &mut GameInfo, payment: Coin<SUI>, ctx: &mut TxContext): Sword {
+    // Random strength từ 1-5
+    #[allow(lint(public_random))]
+    public fun create_sword(game: &mut GameInfo, payment: Coin<SUI>, r: &Random,  ctx: &mut TxContext): Sword {
         // Lấy số lượng coin hiện tại mà user sở hữu 
         let value = coin::value(&payment);
 
@@ -319,7 +323,7 @@ module game::hero {
         Sword {
             id: object::new(ctx),
             magic: std::u64::min(magic, MAX_MAGIC),
-            strength: 1,
+            strength: get_random(r, ctx),
             game_id: object::id(game)
         }
 
@@ -371,6 +375,15 @@ module game::hero {
         sword.strength =  sword.strength + amount;
     }
 
+    /// -------------------------------------------------------------------------------
+    /// -----------------------------HELPER FUNCTION TẠO RANDOM------------------------
+    /// -------------------------------------------------------------------------------
+    
+
+    fun get_random(r: &Random, ctx: &mut TxContext) : u64 {
+        let mut generator = random::new_generator(r, ctx);
+        random::generate_u64_in_range(&mut generator, 0, 5)
+    }
 
 }
 
